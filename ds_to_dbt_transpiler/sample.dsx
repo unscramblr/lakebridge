@@ -1,0 +1,30 @@
+BEGIN DSJOB
+   Identifier "Job1"
+   BEGIN DSSTAGE
+      Identifier "SourceStage"
+      StageType "Oracle"
+      BEGIN DSRECORD
+         Identifier "DSLink3"
+         Source "SourceTable"
+         Columns "ID,Name,Value"
+      END DSRECORD
+   END DSSTAGE
+   BEGIN DSSTAGE
+      Identifier "TransformStage"
+      StageType "Transformer"
+      BEGIN DSRECORD
+         Identifier "DSLink4"
+         Source "DSLink3"
+         Target "DSLink5"
+         Transform "ID=SourceStage.ID,NewName=SourceStage.Name"
+      END DSRECORD
+   END DSSTAGE
+   BEGIN DSSTAGE
+      Identifier "TargetStage"
+      StageType "Oracle"
+      BEGIN DSRECORD
+         Identifier "DSLink5"
+         Target "TargetTable"
+      END DSRECORD
+   END DSSTAGE
+END DSJOB
