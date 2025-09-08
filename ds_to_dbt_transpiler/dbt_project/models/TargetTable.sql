@@ -1,4 +1,4 @@
 
 SELECT
     ID AS ID,\n    Name AS NewName
-FROM {{ ref('stg_DSLink3') }}
+FROM {{ ref('stg_SourceTable') }}

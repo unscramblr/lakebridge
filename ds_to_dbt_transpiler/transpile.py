@@ -4,34 +4,23 @@ from antlr4 import *
 from DSXLexer import DSXLexer
 from DSXParser import DSXParser
 from DSXListener import DSXListener
+from xml_parser import XMLParser, JobInfo as XMLJobInfo
 
-class JobInfo:
-    def __init__(self):
-        self.name = None
-        self.stages = []
+# Using the JobInfo from the XML parser as the canonical one
+class JobInfo(XMLJobInfo):
+    pass
 
-class StageInfo:
+class DSXJobInfoListener(DSXListener):
     def __init__(self):
-        self.name = None
-        self.properties = {}
-        self.records = []
-
-class RecordInfo:
-    def __init__(self):
-        self.name = None
-        self.properties = {}
-
-class JobInfoListener(DSXListener):
-    def __init__(self):
-        self.job_info = None
+        self.job_info = JobInfo()
         self.current_stage = None
         self.current_record = None
 
     def enterDsjob(self, ctx:DSXParser.DsjobContext):
-        self.job_info = JobInfo()
         self.job_info.name = ctx.identifier().propvalue().getText().strip('"')
 
     def enterDsstage(self, ctx:DSXParser.DsstageContext):
+        from xml_parser import StageInfo # avoid circular import at top level
         self.current_stage = StageInfo()
         self.current_stage.name = ctx.identifier().propvalue().getText().strip('"')
         self.job_info.stages.append(self.current_stage)
@@ -40,6 +29,7 @@ class JobInfoListener(DSXListener):
         self.current_stage = None
 
     def enterDsrecord(self, ctx:DSXParser.DsrecordContext):
+        from xml_parser import RecordInfo
         self.current_record = RecordInfo()
         self.current_record.name = ctx.identifier().propvalue().getText().strip('"')
         if self.current_stage:
@@ -61,11 +51,13 @@ def find_source_and_target_tables(job_info):
     source_table = None
     target_table = None
     for stage in job_info.stages:
-        for record in stage.records:
-            if 'Source' in record.properties:
-                source_table = record.properties['Source']
-            if 'Target' in record.properties:
-                target_table = record.properties['Target']
+        # Only look for real source/target tables in non-transformer stages
+        if stage.properties.get('StageType') != 'Transformer':
+            for record in stage.records:
+                if 'Source' in record.properties:
+                    source_table = record.properties['Source']
+                if 'Target' in record.properties:
+                    target_table = record.properties['Target']
     return source_table, target_table
 
 def find_transform_stage(job_info):
@@ -84,7 +76,6 @@ def create_dbt_project(job_info, output_dir="dbt_project"):
     if not transform_stage:
         raise Exception("Could not find a Transformer stage")
 
-    # ... (rest of the create_dbt_project function is the same)
     project_output_dir = os.path.join(os.path.dirname(__file__), output_dir)
     models_dir = os.path.join(project_output_dir, "models", "staging")
     os.makedirs(models_dir, exist_ok=True)
@@ -126,24 +117,36 @@ FROM {{{{ ref('stg_{source_table}') }}}}
         f.write(final_model_sql)
 
 def main():
-    arg_parser = argparse.ArgumentParser(description='Transpile a DataStage DSX file to a dbt project.')
-    arg_parser.add_argument('dsx_file', type=str, help='The path to the input .dsx file.')
+    arg_parser = argparse.ArgumentParser(description='Transpile a DataStage file to a dbt project.')
+    arg_parser.add_argument('input_file', type=str, help='The path to the input .dsx or .xml file.')
     args = arg_parser.parse_args()
-    print(f"Starting transpiler for {args.dsx_file}...")
-    input_stream = FileStream(args.dsx_file)
-    lexer = DSXLexer(input_stream)
-    stream = CommonTokenStream(lexer)
-    parser = DSXParser(stream)
-    tree = parser.dsx()
-    listener = JobInfoListener()
-    walker = ParseTreeWalker()
-    walker.walk(listener, tree)
-    if listener.job_info and listener.job_info.name:
-        print(f"Successfully parsed job: {listener.job_info.name}")
-        create_dbt_project(listener.job_info, output_dir="dbt_project")
+
+    print(f"Starting transpiler for {args.input_file}...")
+
+    job_info = None
+    if args.input_file.endswith('.xml'):
+        parser = XMLParser(args.input_file)
+        job_info = parser.parse()
+    elif args.input_file.endswith('.dsx'):
+        input_stream = FileStream(args.input_file)
+        lexer = DSXLexer(input_stream)
+        stream = CommonTokenStream(lexer)
+        parser = DSXParser(stream)
+        tree = parser.dsx()
+        listener = DSXJobInfoListener()
+        walker = ParseTreeWalker()
+        walker.walk(listener, tree)
+        job_info = listener.job_info
+    else:
+        print("Unsupported file type. Please provide a .dsx or .xml file.")
+        return
+
+    if job_info and job_info.name:
+        print(f"Successfully parsed job: {job_info.name}")
+        create_dbt_project(job_info, output_dir="dbt_project")
         print("dbt project created successfully.")
     else:
-        print("Failed to parse the DSX content.")
+        print("Failed to parse the input file.")
 
 if __name__ == "__main__":
     main()

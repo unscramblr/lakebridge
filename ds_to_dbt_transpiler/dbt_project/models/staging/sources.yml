@@ -3,4 +3,4 @@ version: 2
 sources:
   - name: src
     tables:
-      - name: DSLink3
+      - name: SourceTable

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DSExport>
+  <DSJob Name="Job1">
+    <DSStage Name="SourceStage" Type="Oracle">
+      <DSRecord Name="DSLink3">
+        <Property Name="Source">SourceTable</Property>
+        <Property Name="Columns">ID,Name,Value</Property>
+      </DSRecord>
+    </DSStage>
+    <DSStage Name="TransformStage" Type="Transformer">
+      <DSRecord Name="DSLink4">
+        <Property Name="Source">DSLink3</Property>
+        <Property Name="Target">DSLink5</Property>
+        <Property Name="Transform">ID=SourceStage.ID,NewName=SourceStage.Name</Property>
+      </DSRecord>
+    </DSStage>
+    <DSStage Name="TargetStage" Type="Oracle">
+      <DSRecord Name="DSLink5">
+        <Property Name="Target">TargetTable</Property>
+      </DSRecord>
+    </DSStage>
+  </DSJob>
+</DSExport>
